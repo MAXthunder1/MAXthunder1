@@ -1,0 +1,85 @@
+version: '3'
+services:
+  kasm_guac:
+    container_name: kasm_guac
+    user: "${KASM_UID?}:${KASM_GID?}"
+    image: "kasmweb/kasm-guac:1.16.0"
+    read_only: true
+    networks:
+      - kasm_default_network
+    volumes:
+      - /opt/kasm/1.16.0/log:/opt/kasm/current/log
+      - /opt/kasm/1.16.0/tmp/guac:/opt/kasm/current/tmp/guac
+      - /opt/kasm/1.16.0/conf/app/kasmguac.app.config.yaml:/opt/kasm/current/conf/app/kasmguac.app.config.yaml
+      - /opt/kasm/1.16.0/tmp/guac:/tmp
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "20"
+  rdp_gateway:
+    container_name: kasm_rdp_gateway
+    image: "kasmweb/rdp-gateway:1.16.0"
+    user: "${KASM_UID?}:${KASM_GID?}"
+    read_only: true
+    ports:
+      - "3389:3389"
+    networks:
+      - kasm_default_network
+    volumes:
+      - /opt/kasm/1.16.0/log:/opt/kasm/current/log
+      - /opt/kasm/1.16.0/conf/app/rdpproxy.ini:/usr/local/etc/rdpproxy/rdpproxy.ini
+      - /opt/kasm/1.16.0/conf/app/passthrough.app.config.yaml:/usr/local/etc/rdpproxy/passthrough.app.config.yaml
+      - /opt/kasm/1.16.0/certs/kasm_nginx.key:/usr/local/etc/rdpproxy/rdpproxy.key
+      - /opt/kasm/1.16.0/certs/kasm_nginx.crt:/usr/local/etc/rdpproxy/rdpproxy.crt
+      - /opt/kasm/1.16.0/tmp/rdpgw/var:/usr/local/etc/rdpproxy/var
+      - /opt/kasm/1.16.0/tmp/rdpgw/tmp:/tmp
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "20"
+  kasm_rdp_https_gateway:
+    container_name: kasm_rdp_https_gateway
+    image: "kasmweb/rdp-https-gateway:1.16.0"
+    user: "${KASM_UID?}:${KASM_GID?}"
+    read_only: true
+    depends_on:
+      - rdp_gateway
+    networks:
+      - kasm_default_network
+    volumes:
+      - /opt/kasm/1.16.0/log:/opt/kasm/current/log
+      - /opt/kasm/1.16.0/conf/app/rdp_https_gateway.app.config.yaml:/opt/rdpgw/rdpgw_kasm.yaml
+      - /opt/kasm/1.16.0/conf/app/rdpgw.yaml:/opt/rdpgw/rdpgw.yaml
+      - /opt/kasm/1.16.0/certs/kasm_nginx.key:/opt/rdpgw/key.pem
+      - /opt/kasm/1.16.0/certs/kasm_nginx.crt:/opt/rdpgw/server.pem
+    restart: always
+  proxy:
+    container_name: kasm_proxy
+    image: "kasmweb/proxy:1.16.0"
+    ports:
+      - "443:443"
+    networks:
+      - kasm_default_network
+    volumes:
+      - /opt/kasm/1.16.0/conf/nginx:/etc/nginx/conf.d:ro
+      - /opt/kasm/1.16.0/certs/kasm_nginx.key:/etc/ssl/private/kasm_nginx.key
+      - /opt/kasm/1.16.0/certs/kasm_nginx.crt:/etc/ssl/certs/kasm_nginx.crt
+      - /opt/kasm/1.16.0/log/nginx:/var/log/external/nginx/
+      - /opt/kasm/1.16.0/log/logrotate:/var/log/external/logrotate/
+    depends_on:
+      - kasm_guac
+      - kasm_rdp_https_gateway
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "20"
+
+networks:
+  kasm_default_network:
+    external: true
